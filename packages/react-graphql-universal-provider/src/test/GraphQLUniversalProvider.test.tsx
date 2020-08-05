@@ -5,7 +5,7 @@ import {ApolloLink} from 'apollo-link';
 import {extract} from '@shopify/react-effect/server';
 import {mount} from '@shopify/react-testing';
 import {HtmlManager, HtmlContext} from '@shopify/react-html';
-import {ApolloProvider, SsrExtractableLink} from '@shopify/react-graphql';
+import {ApolloProvider} from '@shopify/react-graphql';
 
 import {GraphQLUniversalProvider} from '../GraphQLUniversalProvider';
 
@@ -25,7 +25,20 @@ jest.mock('@shopify/react-graphql', () => {
   };
 });
 
+jest.mock('../utilities', () => ({
+  isServer: jest.fn(),
+}));
+
+const {isServer} = require.requireMock('../utilities') as {
+  isServer: jest.Mock;
+};
+
 describe('<GraphQLUniversalProvider />', () => {
+  beforeEach(() => {
+    isServer.mockClear();
+    isServer.mockImplementation(() => true);
+  });
+
   it('renders an ApolloProvider with a client created by the factory', () => {
     const clientOptions = {
       cache: new InMemoryCache(),
@@ -86,6 +99,70 @@ describe('<GraphQLUniversalProvider />', () => {
 
     expect(graphQL).toContainReactComponent(ApolloProvider, {
       client: expect.objectContaining({link: expect.any(ApolloLink)}),
+    });
+  });
+
+  it('includes a InMemoryCache when none is given in clientOptions', () => {
+    const clientOptions = {};
+
+    const graphQL = mount(
+      <GraphQLUniversalProvider createClientOptions={() => clientOptions} />,
+    );
+
+    expect(graphQL).toContainReactComponent(ApolloProvider, {
+      client: expect.objectContaining({cache: expect.any(InMemoryCache)}),
+    });
+  });
+
+  describe('ssrMode', () => {
+    it('ssrMode is set to true when it is on the server', () => {
+      isServer.mockReturnValue(true);
+
+      const graphQL = mount(
+        <GraphQLUniversalProvider createClientOptions={() => ({})} />,
+      );
+
+      expect(graphQL).toContainReactComponent(ApolloProvider, {
+        client: expect.objectContaining({
+          queryManager: expect.objectContaining({
+            ssrMode: true,
+          }),
+        }),
+      });
+    });
+
+    it('ssrMode is set to false when it is on the client', () => {
+      isServer.mockReturnValue(false);
+
+      const graphQL = mount(
+        <GraphQLUniversalProvider createClientOptions={() => ({})} />,
+      );
+
+      expect(graphQL).toContainReactComponent(ApolloProvider, {
+        client: expect.objectContaining({
+          queryManager: expect.objectContaining({
+            ssrMode: false,
+          }),
+        }),
+      });
+    });
+
+    it('ssrMode is set to the value returend in createClientOptions', () => {
+      isServer.mockReturnValue(true);
+
+      const graphQL = mount(
+        <GraphQLUniversalProvider
+          createClientOptions={() => ({ssrMode: false})}
+        />,
+      );
+
+      expect(graphQL).toContainReactComponent(ApolloProvider, {
+        client: expect.objectContaining({
+          queryManager: expect.objectContaining({
+            ssrMode: false,
+          }),
+        }),
+      });
     });
   });
 });
